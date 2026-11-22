@@ -1,0 +1,29 @@
+# secrets
+.env
+
+# Python / tooling
+__pycache__/
+*.pyc
+.venv/
+venv/
+.vscode/
+.idea/
+
+# Airflow runtime files
+logs/
+standalone_admin_password.txt
+airflow.db
+
+# data: the CSVs are too big for GitHub (sales file > 100 MB); keep only the folder structure
+data/**/*.csv
+data/**/*.zip
+!data/**/.gitkeep
+
+# Office lock / temp files
+~$*
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

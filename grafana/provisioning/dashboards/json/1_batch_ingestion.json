@@ -1,0 +1,551 @@
+{
+  "uid": "pharma-batch-ingestion",
+  "title": "1 · Batch Ingestion",
+  "tags": [
+    "phase1",
+    "pharma",
+    "ingestion"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m"
+    ]
+  },
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Batch ingestion.** A Python file watcher (Airflow sensor) picks up CSVs landing in `data/incoming/` and COPYs each one into `staging.<table>`. Every file load is timed and logged to `audit.batch_load_log`."
+      },
+      "id": 1
+    },
+    {
+      "type": "stat",
+      "title": "Batch success rate",
+      "description": "successful file loads / attempted file loads x 100",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT round(100.0 * count(*) FILTER (WHERE status = 'success') / NULLIF(count(*), 0), 1) AS \"success rate\"\nFROM audit.batch_load_log"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#e66767",
+                "value": null
+              },
+              {
+                "color": "#c98500",
+                "value": 90
+              },
+              {
+                "color": "#0ca30c",
+                "value": 99.9
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 2
+    },
+    {
+      "type": "stat",
+      "title": "Files loaded",
+      "description": "Number of file loads attempted",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) AS files FROM audit.batch_load_log"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 3
+    },
+    {
+      "type": "stat",
+      "title": "Rows loaded to staging",
+      "description": "Total rows read from CSV and inserted into staging (len(df))",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT COALESCE(sum(rows_loaded),0) AS rows FROM audit.batch_load_log WHERE status='success'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 4
+    },
+    {
+      "type": "stat",
+      "title": "Total load time",
+      "description": "Sum of batch load durations (end - start timestamp per file)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT COALESCE(sum(duration_s),0) AS seconds FROM audit.batch_load_log"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 5
+    },
+    {
+      "type": "barchart",
+      "title": "Load duration per source file (s)",
+      "description": "Recommended chart: latest load duration of each source (Timestamp_end - Timestamp_start). Shows at a glance which large file takes the longest.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 12,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT DISTINCT ON (source_key) source_key AS source, round(duration_s, 2) AS \"load seconds\"\nFROM audit.batch_load_log ORDER BY source_key, finished_at DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "gradientMode": "none",
+            "axisGridShow": true,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "source",
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.85,
+        "barRadius": 0.1,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "id": 6
+    },
+    {
+      "type": "barchart",
+      "title": "Rows processed per batch (latest load per source)",
+      "description": "Exact record count loaded from each file",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 12,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT DISTINCT ON (source_key) source_key AS source, rows_loaded AS \"rows\"\nFROM audit.batch_load_log ORDER BY source_key, finished_at DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "gradientMode": "none",
+            "axisGridShow": true,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "source",
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.85,
+        "barRadius": 0.1,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "id": 7
+    },
+    {
+      "type": "timeseries",
+      "title": "Load throughput over time (rows/s)",
+      "description": "rows loaded / load seconds, one point per file load",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT finished_at AS time, source_key AS metric, rows_loaded / NULLIF(duration_s, 0) AS value\nFROM audit.batch_load_log WHERE status = 'success' AND $__timeFilter(finished_at) ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "points",
+            "lineWidth": 2,
+            "fillOpacity": 80,
+            "pointSize": 8,
+            "showPoints": "auto",
+            "spanNulls": true,
+            "axisSoftMin": 0,
+            "lineInterpolation": "linear"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 8
+    },
+    {
+      "type": "table",
+      "title": "File load log",
+      "description": "Every file the watcher picked up, newest first",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 17,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT finished_at AS \"finished\", source_file AS file, target_table AS \"table\", rows_loaded AS rows,\n       round(duration_s, 2) AS seconds, round(file_size_mb, 1) AS \"MB\", status, error_message AS error\nFROM audit.batch_load_log ORDER BY finished_at DESC LIMIT 100"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "success": {
+                        "color": "#0ca30c",
+                        "index": 0,
+                        "text": "✔ success"
+                      },
+                      "failed": {
+                        "color": "#e66767",
+                        "index": 1,
+                        "text": "✖ failed"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "id": 9
+    }
+  ]
+}

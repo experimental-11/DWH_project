@@ -1,0 +1,565 @@
+{
+  "uid": "pharma-storage",
+  "title": "3 · Storage & Staging",
+  "tags": [
+    "phase1",
+    "pharma",
+    "storage"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m"
+    ]
+  },
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Storage & staging layer (PostgreSQL).** Raw files land in schema `staging` (all TEXT, append-only, with lineage columns); the star schema lives in `dwh`; pipeline metrics in `audit`. Snapshot captured after every pipeline run."
+      },
+      "id": 1
+    },
+    {
+      "type": "stat",
+      "title": "Database size",
+      "description": "Physical size of the pharma_dwh database on disk (pg_database_size)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT round(pg_database_size('pharma_dwh') / 1048576.0, 1) AS \"MB\""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 2
+    },
+    {
+      "type": "stat",
+      "title": "Rows in dimension + fact tables",
+      "description": "Total cumulative records stored across dwh.dim_* and dwh.fact_* (COUNT(*))",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT COALESCE(sum(row_count),0) AS rows FROM audit.storage_metrics\nWHERE run_id = (SELECT run_id FROM audit.storage_metrics ORDER BY captured_at DESC LIMIT 1) AND schema_name = 'dwh' AND (table_name LIKE 'dim\\_%' OR table_name LIKE 'fact\\_%')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 3
+    },
+    {
+      "type": "stat",
+      "title": "Rows in staging (ODS)",
+      "description": "Total raw rows in the staging schema",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT COALESCE(sum(row_count),0) AS rows FROM audit.storage_metrics\nWHERE run_id = (SELECT run_id FROM audit.storage_metrics ORDER BY captured_at DESC LIMIT 1) AND schema_name = 'staging'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 4
+    },
+    {
+      "type": "stat",
+      "title": "Sales date coverage",
+      "description": "MAX(sale_date) - MIN(sale_date) in fact_sales; should span 2023-2025 (+ refreshes)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT DISTINCT ON (table_name) to_char(min_date,'YYYY-MM-DD') || ' → ' || to_char(max_date,'YYYY-MM-DD') AS span\nFROM audit.date_coverage WHERE table_name = 'dwh.fact_sales' ORDER BY table_name, captured_at DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 5
+    },
+    {
+      "type": "barchart",
+      "title": "Storage footprint by source domain (MB)",
+      "description": "Recommended chart: storage contributed by each of the 7 source domains (staging + warehouse tables built from it); pipeline metadata shown separately",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 12,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT source_domain AS domain, round(sum(size_bytes) / 1048576.0, 2) AS \"MB\"\nFROM audit.storage_metrics WHERE run_id = (SELECT run_id FROM audit.storage_metrics ORDER BY captured_at DESC LIMIT 1)\nGROUP BY source_domain ORDER BY 2 DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "gradientMode": "none",
+            "axisGridShow": true,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "domain",
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.85,
+        "barRadius": 0.1,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "id": 6
+    },
+    {
+      "type": "barchart",
+      "title": "Share of stored rows by source domain (%)",
+      "description": "% of all stored rows contributed by each source domain",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 12,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT source_domain AS domain,\n       round(100.0 * sum(row_count) / NULLIF(sum(sum(row_count)) OVER (), 0), 2) AS \"% of rows\"\nFROM audit.storage_metrics WHERE run_id = (SELECT run_id FROM audit.storage_metrics ORDER BY captured_at DESC LIMIT 1) AND schema_name <> 'audit'\nGROUP BY source_domain ORDER BY 2 DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "gradientMode": "none",
+            "axisGridShow": true,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "domain",
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.85,
+        "barRadius": 0.1,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "id": 7
+    },
+    {
+      "type": "barchart",
+      "title": "Row count per table",
+      "description": "SELECT COUNT(*) FROM each staging and warehouse table (latest snapshot)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 12,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT schema_name || '.' || table_name AS \"table\", row_count AS rows\nFROM audit.storage_metrics WHERE run_id = (SELECT run_id FROM audit.storage_metrics ORDER BY captured_at DESC LIMIT 1) AND schema_name <> 'audit'\nORDER BY row_count DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "gradientMode": "none",
+            "axisGridShow": true,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "table",
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.85,
+        "barRadius": 0.1,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "id": 8
+    },
+    {
+      "type": "table",
+      "title": "Date coverage span",
+      "description": "Validation that the 2023-2025 range is fully represented (MAX - MIN, distinct year-month partitions)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 17,
+        "w": 12,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT DISTINCT ON (table_name) table_name AS \"table\", min_date AS \"from\", max_date AS \"to\",\n       span_days AS \"span (days)\", distinct_months AS \"distinct months\"\nFROM audit.date_coverage ORDER BY table_name, captured_at DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "id": 9
+    },
+    {
+      "type": "timeseries",
+      "title": "Fact table growth across pipeline runs",
+      "description": "Row counts captured after every run: the warehouse keeps its history and grows with each refresh",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 22,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT captured_at AS time, table_name AS metric, row_count AS value\nFROM audit.storage_metrics\nWHERE schema_name = 'dwh' AND table_name IN ('fact_sales', 'fact_hospital_demand') AND $__timeFilter(captured_at)\nORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "pointSize": 8,
+            "showPoints": "auto",
+            "spanNulls": true,
+            "axisSoftMin": 0,
+            "lineInterpolation": "linear"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 10
+    }
+  ]
+}

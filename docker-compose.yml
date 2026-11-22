@@ -1,0 +1,92 @@
+# Pharma Cold Chain DWH - local stack
+#   postgres : the warehouse (staging / dwh / audit schemas) + Airflow's own metadata DB
+#   airflow  : scheduler + webserver in one container ("standalone" mode)
+#   grafana  : DE observability dashboards (batch / stream / storage / query)
+#
+# Passwords live in .env (not committed). First time:  cp .env.example .env  and edit it.
+#
+# Start:  docker compose up -d
+# Stop:   docker compose down          (keeps data)
+# Reset:  docker compose down -v       (DELETES the warehouse volume)
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: pharma_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dwh}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-pharma_dwh}
+      AIRFLOW_DB_PASSWORD: ${AIRFLOW_DB_PASSWORD:?set AIRFLOW_DB_PASSWORD in .env}
+    ports:
+      - "5433:5432"          # host port 5433 so it doesn't clash with a local Postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/00_init_airflow_db.sh:/docker-entrypoint-initdb.d/00_init_airflow_db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 20
+
+  airflow:
+    image: apache/airflow:2.10.5-python3.11
+    container_name: pharma_airflow
+    # admin login comes from AIRFLOW_ADMIN_PASSWORD in .env (created if missing, reset on every start)
+    command:
+      - bash
+      - -c
+      - |
+        airflow db migrate > /dev/null
+        airflow users create --username admin --password "$$AIRFLOW_ADMIN_PASSWORD" --role Admin           --firstname Admin --lastname User --email admin@example.com > /dev/null 2>&1 || true
+        airflow users reset-password --username admin --password "$$AIRFLOW_ADMIN_PASSWORD" > /dev/null
+        exec airflow standalone
+    user: "${AIRFLOW_UID:-50000}:0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "True"
+      AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: "30"
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "False"   # don't show config (incl. connection strings) in the UI
+      AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: "300"   # slow PCs need > 120 s for the UI to start
+      AIRFLOW__WEBSERVER__WORKERS: "2"
+      # Connection used by every task: conn_id = pharma_dwh
+      AIRFLOW_CONN_PHARMA_DWH: postgres://${POSTGRES_USER:-dwh}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-pharma_dwh}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:?set AIRFLOW_ADMIN_PASSWORD in .env}
+      PYTHONPATH: /opt/airflow/include
+      PHARMA_DATA_DIR: /opt/airflow/data
+      PHARMA_SQL_DIR: /opt/airflow/sql
+    ports:
+      - "8081:8080"   # host 8081: 8080 is used by Oracle XE on this PC
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./include:/opt/airflow/include
+      - ./sql:/opt/airflow/sql
+      - ./data:/opt/airflow/data
+      - airflow_home:/opt/airflow/logs
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: pharma_grafana
+    depends_on:
+      - postgres
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:?set GF_ADMIN_PASSWORD in .env}
+      # read by grafana/provisioning/datasources/postgres.yml
+      DWH_USER: ${POSTGRES_USER:-dwh}
+      DWH_PASSWORD: ${POSTGRES_PASSWORD}
+      DWH_DB: ${POSTGRES_DB:-pharma_dwh}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+
+volumes:
+  pgdata:
+  airflow_home:
+  grafana_data:

@@ -1,0 +1,610 @@
+{
+  "uid": "pharma-transformation",
+  "title": "4 · Transformation & Dimensional Modeling",
+  "tags": [
+    "phase1",
+    "pharma",
+    "transformation"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m"
+    ]
+  },
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 4
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Transformation & dimensional modeling.** Staging views rename + type-cast the raw TEXT columns; then `dim_medicine` (**SCD Type 2**, price history), `dim_hospital` / `dim_location` / `dim_channel` (**SCD Type 1**), `dim_sales_profile` (**junk dimension**: payment x discount x order size x customer segment x payer x promotion) and `dim_date` (**role-playing**: sale date / demand month) are loaded, followed by `fact_sales` (**transaction fact**, partitioned by month, degenerate dimension `mfg_batch_id`) and `fact_hospital_demand` (**periodic snapshot**, hospital x medicine x month). Loads are incremental (watermarks); rows failing validation go to `audit.rejected_rows`."
+      },
+      "id": 1
+    },
+    {
+      "type": "stat",
+      "title": "Last transform duration",
+      "description": "Sum of the transformation steps (views -> dims -> facts) in the latest load",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT round(sum(duration_s), 1) AS seconds FROM audit.etl_step_log\nWHERE run_id = (SELECT run_id FROM audit.etl_step_log WHERE step_name = '20_load_fact_sales.sql' ORDER BY executed_at DESC LIMIT 1) AND step_name IN ('03_staging_views.sql','10_load_dim_medicine.sql','11_load_dim_hospital.sql','12_load_dim_sales_misc.sql','20_load_fact_sales.sql','21_load_fact_hospital_demand.sql')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 2
+    },
+    {
+      "type": "stat",
+      "title": "Fact rows in the mart",
+      "description": "fact_sales + fact_hospital_demand",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT (SELECT count(*) FROM dwh.fact_sales) + (SELECT count(*) FROM dwh.fact_hospital_demand) AS rows"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 3
+    },
+    {
+      "type": "stat",
+      "title": "Validation pass rate",
+      "description": "fact rows / (fact rows + rejected rows) x 100 for the two SDI facts",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH r AS (SELECT count(*) n FROM audit.rejected_rows\n           WHERE source_table IN ('staging.pharmacy_sales', 'staging.hospital_demand')),\n     f AS (SELECT (SELECT count(*) FROM dwh.fact_sales) + (SELECT count(*) FROM dwh.fact_hospital_demand) n)\nSELECT round(100.0 * f.n / NULLIF(f.n + r.n, 0), 2) AS \"pass rate\" FROM f, r"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#e66767",
+                "value": null
+              },
+              {
+                "color": "#c98500",
+                "value": 95
+              },
+              {
+                "color": "#0ca30c",
+                "value": 99
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 4
+    },
+    {
+      "type": "stat",
+      "title": "SCD2 history versions",
+      "description": "dim_medicine rows that are closed historical versions; grows when prices change",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) FILTER (WHERE NOT is_current) AS \"closed versions\" FROM dwh.dim_medicine"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 5
+    },
+    {
+      "type": "barchart",
+      "title": "Duration per transformation step (latest load, s)",
+      "description": "Time of each SQL step of the latest load",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT step_name AS step, round(duration_s, 2) AS seconds FROM audit.etl_step_log\nWHERE run_id = (SELECT run_id FROM audit.etl_step_log WHERE step_name = '20_load_fact_sales.sql' ORDER BY executed_at DESC LIMIT 1) AND step_name IN ('03_staging_views.sql','10_load_dim_medicine.sql','11_load_dim_hospital.sql','12_load_dim_sales_misc.sql','20_load_fact_sales.sql','21_load_fact_hospital_demand.sql') ORDER BY executed_at"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "gradientMode": "none",
+            "axisGridShow": true,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "step",
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.85,
+        "barRadius": 0.1,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "id": 6
+    },
+    {
+      "type": "barchart",
+      "title": "Rows per dimension & fact table",
+      "description": "Current row count of every star-schema table",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT t AS \"table\", n AS rows FROM (\n  SELECT 'fact_sales' t, count(*) n FROM dwh.fact_sales UNION ALL\n  SELECT 'fact_hospital_demand', count(*) FROM dwh.fact_hospital_demand UNION ALL\n  SELECT 'dim_medicine', count(*) FROM dwh.dim_medicine UNION ALL\n  SELECT 'dim_location', count(*) FROM dwh.dim_location UNION ALL\n  SELECT 'dim_sales_profile (junk)', count(*) FROM dwh.dim_sales_profile UNION ALL\n  SELECT 'dim_hospital', count(*) FROM dwh.dim_hospital UNION ALL\n  SELECT 'dim_channel', count(*) FROM dwh.dim_channel) x ORDER BY n DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "gradientMode": "none",
+            "axisGridShow": true,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "table",
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.85,
+        "barRadius": 0.1,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "id": 7
+    },
+    {
+      "type": "table",
+      "title": "Rejected rows by validation rule",
+      "description": "price > 0, valid dates, non-null SKU IDs, known medicine ... (empty = no rejects)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT source_table AS source, reject_reason AS rule, count(*) AS rows, max(rejected_at) AS \"last seen\"\nFROM audit.rejected_rows GROUP BY 1, 2 ORDER BY 3 DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "id": 8
+    },
+    {
+      "type": "table",
+      "title": "Incremental load watermarks",
+      "description": "Last staging _ingest_id processed per target (next run starts after it)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 17,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT target, last_ingest_id AS \"last ingest id\", updated_at AS updated FROM audit.etl_watermark ORDER BY target"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "id": 9
+    },
+    {
+      "type": "table",
+      "title": "SCD Type 2 history: dim_medicine versions",
+      "description": "Medicines with more than one version (price/cost changes from the generator). Empty until the first refresh with price changes.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT medicine_id, version_no AS version, medicine_name, unit_cost, unit_price, valid_from, valid_to, is_current\nFROM dwh.dim_medicine\nWHERE medicine_id IN (SELECT medicine_id FROM dwh.dim_medicine GROUP BY 1 HAVING count(*) > 1)\nORDER BY medicine_id, version_no"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "id": 10
+    },
+    {
+      "type": "timeseries",
+      "title": "Transformation step duration across runs (s)",
+      "description": "One point per step per load",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 25,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT executed_at AS time, step_name AS metric, duration_s AS value FROM audit.etl_step_log\nWHERE step_name IN ('03_staging_views.sql','10_load_dim_medicine.sql','11_load_dim_hospital.sql','12_load_dim_sales_misc.sql','20_load_fact_sales.sql','21_load_fact_hospital_demand.sql') AND $__timeFilter(executed_at) ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "points",
+            "lineWidth": 2,
+            "fillOpacity": 80,
+            "pointSize": 8,
+            "showPoints": "auto",
+            "spanNulls": true,
+            "axisSoftMin": 0,
+            "lineInterpolation": "linear"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 11
+    }
+  ]
+}

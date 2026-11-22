@@ -1,0 +1,715 @@
+{
+  "uid": "pharma-query-layer",
+  "title": "5 · Analytical Query Layer",
+  "tags": [
+    "phase1",
+    "pharma",
+    "query",
+    "business"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "year",
+        "label": "Q1 year",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "pharma_dwh"
+        },
+        "query": "SELECT DISTINCT extract(year FROM sale_date)::int FROM dwh.mv_sales_daily ORDER BY 1 DESC",
+        "definition": "SELECT DISTINCT extract(year FROM sale_date)::int FROM dwh.mv_sales_daily ORDER BY 1 DESC",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "disease",
+        "label": "Q1 disease category",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "pharma_dwh"
+        },
+        "query": "SELECT DISTINCT disease_category FROM dwh.dim_medicine WHERE is_current ORDER BY 1",
+        "definition": "SELECT DISTINCT disease_category FROM dwh.dim_medicine WHERE is_current ORDER BY 1",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "q2_year",
+        "label": "Q2 year",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "pharma_dwh"
+        },
+        "query": "SELECT DISTINCT extract(year FROM sale_date)::int FROM dwh.mv_sales_daily ORDER BY 1 DESC",
+        "definition": "SELECT DISTINCT extract(year FROM sale_date)::int FROM dwh.mv_sales_daily ORDER BY 1 DESC",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "quarter",
+        "label": "Q3 quarter",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "pharma_dwh"
+        },
+        "query": "SELECT DISTINCT d.year_no || '-Q' || d.quarter_no FROM dwh.fact_hospital_demand f JOIN dwh.dim_date d ON d.date_key = f.month_date_key ORDER BY 1 DESC",
+        "definition": "SELECT DISTINCT d.year_no || '-Q' || d.quarter_no FROM dwh.fact_hospital_demand f JOIN dwh.dim_date d ON d.date_key = f.month_date_key ORDER BY 1 DESC",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {},
+        "hide": 0
+      }
+    ]
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m"
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Query performance",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "id": 1
+    },
+    {
+      "type": "stat",
+      "title": "Queries executed",
+      "description": "Total analytical queries executed (benchmarks after each pipeline run + business queries run on this dashboard)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) AS queries FROM audit.query_log"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 2
+    },
+    {
+      "type": "stat",
+      "title": "Query error rate",
+      "description": "failed queries / executed queries x 100",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT round(100.0 * count(*) FILTER (WHERE status <> 'success') / NULLIF(count(*), 0), 2) AS \"error rate\"\nFROM audit.query_log"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#e66767",
+                "value": 0.01
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true
+      },
+      "id": 3
+    },
+    {
+      "type": "barchart",
+      "title": "Avg execution time per dashboard widget (ms)",
+      "description": "Average query time per widget/KPI card, raw star join vs materialized view - spots unoptimised joins",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT widget_name AS widget,\n       round(avg(duration_ms) FILTER (WHERE variant = 'raw_star_join'), 1)     AS \"raw star join\",\n       round(avg(duration_ms) FILTER (WHERE variant = 'materialized_view'), 1) AS \"materialized view\"\nFROM audit.query_log WHERE status = 'success' AND variant IN ('raw_star_join', 'materialized_view')\nGROUP BY widget_name ORDER BY 2 DESC NULLS LAST"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "gradientMode": "none",
+            "axisGridShow": true,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "raw star join"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "materialized view"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "vertical",
+        "xField": "widget",
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.85,
+        "barRadius": 0.1,
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "id": 4
+    },
+    {
+      "type": "row",
+      "title": "Business queries (Q1-Q3): pick the parameters in the dropdowns at the top",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 24,
+        "h": 1
+      },
+      "id": 5
+    },
+    {
+      "type": "table",
+      "title": "Q1 · Most common $disease medicine per city ($year)",
+      "description": "fact_sales → dim_date (year), dim_medicine (disease category), dim_location (city); ranked by packs sold",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT city, medicine_name AS medicine, packs_sold AS \"packs sold\", share_of_city_pct AS \"% of city's packs\"\nFROM dwh.q1_top_medicine_per_city($year, '$disease')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "id": 6
+    },
+    {
+      "type": "barchart",
+      "title": "Q1 · Packs sold of the top medicine per city",
+      "description": "Same query as the table",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT city || ' · ' || medicine_name AS \"city · medicine\", packs_sold AS \"packs sold\"\nFROM dwh.q1_top_medicine_per_city($year, '$disease') ORDER BY packs_sold DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "gradientMode": "none",
+            "axisGridShow": true,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "city · medicine",
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.85,
+        "barRadius": 0.1,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "id": 7
+    },
+    {
+      "type": "barchart",
+      "title": "Q2 · Net sales by therapeutic class: Physical vs E-commerce ($q2_year, top 15)",
+      "description": "fact_sales → dim_date, dim_channel, dim_medicine (therapeutic class)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 12,
+        "h": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT therapeutic_class AS class,\n       sum(net_sales_usd) FILTER (WHERE channel = 'Physical Pharmacy') AS \"Physical Pharmacy\",\n       sum(net_sales_usd) FILTER (WHERE channel = 'E-commerce')        AS \"E-commerce\"\nFROM dwh.q2_channel_by_therapeutic_class($q2_year)\nGROUP BY therapeutic_class ORDER BY 2 DESC NULLS LAST LIMIT 15"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#3987e5"
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "gradientMode": "none",
+            "axisGridShow": true,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Physical Pharmacy"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "E-commerce"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "class",
+        "showValue": "never",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.85,
+        "barRadius": 0.1,
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "id": 8
+    },
+    {
+      "type": "table",
+      "title": "Q2 · Net sales & gross margin by channel and therapeutic class ($q2_year)",
+      "description": "All classes",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 28,
+        "w": 12,
+        "h": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT channel, therapeutic_class AS \"therapeutic class\", net_sales_usd AS \"net sales $\",\n       gross_margin_usd AS \"gross margin $\", margin_pct AS \"margin %\"\nFROM dwh.q2_channel_by_therapeutic_class($q2_year)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "id": 9
+    },
+    {
+      "type": "barchart",
+      "title": "Q3 · Controlled-medicine packs requested per state ($quarter)",
+      "description": "fact_hospital_demand → dim_date (role: demand month), dim_medicine (controlled flag), dim_hospital (state)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 41,
+        "w": 12,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT state, sum(requested_packs) AS \"requested packs\"\nFROM dwh.q3_controlled_requests_by_state('$quarter') GROUP BY state ORDER BY 2 DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#199e70"
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "gradientMode": "none",
+            "axisGridShow": true,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "state",
+        "showValue": "auto",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.85,
+        "barRadius": 0.1,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "id": 10
+    },
+    {
+      "type": "table",
+      "title": "Q3 · Requested packs per state and controlled medicine ($quarter)",
+      "description": "requested / forecast > 1 means hospitals asked for more than they forecast",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 41,
+        "w": 12,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT state, medicine_name AS medicine, requested_packs AS \"requested packs\",\n       requested_vs_forecast AS \"requested / forecast\"\nFROM dwh.q3_controlled_requests_by_state('$quarter')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "id": 11
+    }
+  ]
+}

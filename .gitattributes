@@ -1,0 +1,6 @@
+# normalise line endings; shell scripts must stay LF (they run inside Linux containers)
+* text=auto
+*.sh text eol=lf
+*.yml text eol=lf
+*.sql text eol=lf
+*.py text eol=lf

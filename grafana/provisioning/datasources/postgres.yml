@@ -1,0 +1,20 @@
+apiVersion: 1
+# removes the old read-only data source (the "Run your own SQL" box was dropped)
+deleteDatasources:
+  - name: PharmaDWH (read-only)
+    orgId: 1
+datasources:
+  - name: PharmaDWH
+    type: grafana-postgresql-datasource
+    uid: pharma_dwh
+    url: postgres:5432
+    user: $DWH_USER
+    database: $DWH_DB
+    isDefault: true
+    jsonData:
+      database: $DWH_DB
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    secureJsonData:
+      password: $DWH_PASSWORD   # from .env via docker-compose (never hard-coded)
