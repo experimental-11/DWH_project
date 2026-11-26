@@ -65,6 +65,18 @@ CREATE TABLE IF NOT EXISTS audit.rejected_rows (
     rejected_at   TIMESTAMPTZ DEFAULT now()
 );
 
+-- ---------- load reconciliation: staged = loaded + rejected + duplicates ----------------
+CREATE TABLE IF NOT EXISTS audit.load_reconciliation (
+    id               BIGSERIAL PRIMARY KEY,
+    target           TEXT,              -- fact table
+    staged_rows      BIGINT,            -- new staging rows read by the load
+    loaded_rows      BIGINT,            -- inserted into the fact table
+    rejected_rows    BIGINT,            -- failed validation or a dimension lookup
+    duplicate_rows   BIGINT,            -- repeated in the batch or already loaded
+    unexplained_rows BIGINT,            -- must be 0, otherwise the load fails
+    checked_at       TIMESTAMPTZ DEFAULT now()
+);
+
 -- ---------- storage dashboard ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS audit.storage_metrics (
     id           BIGSERIAL PRIMARY KEY,

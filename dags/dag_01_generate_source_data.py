@@ -18,7 +18,8 @@ default_args = {"owner": "dwh-team", "retries": 1}
 def _generate(source_key, **context):
     from generator import generate_source
     scale = float(context["params"].get("scale", 1.0))
-    return generate_source(source_key, scale=scale)
+    # run_id makes a retry finish the same batch instead of generating another month
+    return generate_source(source_key, scale=scale, run_id=context["run_id"])
 
 
 def _log_stats(**context):

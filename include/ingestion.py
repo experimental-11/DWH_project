@@ -108,6 +108,8 @@ def ingest_pending(**context) -> list[dict]:
     for r in results:
         print(r)
     failed = [r for r in results if r["status"] != "success"]
-    if failed and len(failed) == len(results):
-        raise RuntimeError(f"All {len(failed)} file loads failed: {failed[0]['error']}")
+    if failed:
+        # the other files are loaded and logged; fail the task so the problem is visible in Airflow
+        raise RuntimeError(f"{len(failed)} of {len(results)} file loads failed (moved to data/failed): "
+                           + "; ".join(f"{r['file']}: {r['error']}" for r in failed))
     return results

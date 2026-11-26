@@ -16,6 +16,7 @@ airflow.db
 
 # data: the CSVs are too big for GitHub (sales file > 100 MB); keep only the folder structure
 data/**/*.csv
+data/source/.pending/
 data/**/*.zip
 !data/**/.gitkeep
 

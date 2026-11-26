@@ -324,6 +324,11 @@ FROM audit.rejected_rows GROUP BY 1, 2 ORDER BY 3 DESC"""),
     table("Incremental load watermarks", "Last staging _ingest_id processed per target (next run starts after it)",
           12, 17, 12, 8, """
 SELECT target, last_ingest_id AS "last ingest id", updated_at AS updated FROM audit.etl_watermark ORDER BY target"""),
+    table("Load reconciliation (staged = loaded + rejected + duplicates)", "Every fact load counts its rows; "
+          "'unexplained' must be 0, otherwise the load fails and nothing is saved", 0, 34, 24, 7, """
+SELECT checked_at AS "checked", target, staged_rows AS staged, loaded_rows AS loaded, rejected_rows AS rejected,
+       duplicate_rows AS duplicates, unexplained_rows AS unexplained
+FROM audit.load_reconciliation ORDER BY checked_at DESC, target LIMIT 50"""),
     table("SCD Type 2 history: dim_medicine versions", "Medicines with more than one version (price/cost changes "
           "from the generator). Empty until the first refresh with price changes.", 0, 25, 12, 9, """
 SELECT medicine_id, version_no AS version, medicine_name, unit_cost, unit_price, valid_from, valid_to, is_current

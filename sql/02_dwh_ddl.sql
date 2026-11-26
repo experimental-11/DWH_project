@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS dwh.dim_medicine (
     strength             TEXT,                   -- e.g. 500 mg
     pack_size            INT,                    -- units per pack
     prescription_class   TEXT,                   -- Prescription / OTC
+    formulary_status     TEXT,                   -- Type 1, from the hospital demand file (same for every hospital)
     row_hash             TEXT NOT NULL,
     valid_from           DATE NOT NULL,
     valid_to             DATE NOT NULL DEFAULT DATE '9999-12-31',
@@ -94,6 +95,7 @@ ALTER TABLE dwh.dim_medicine ADD COLUMN IF NOT EXISTS icd10_category TEXT;
 ALTER TABLE dwh.dim_medicine ADD COLUMN IF NOT EXISTS strength TEXT;
 ALTER TABLE dwh.dim_medicine ADD COLUMN IF NOT EXISTS pack_size INT;
 ALTER TABLE dwh.dim_medicine ADD COLUMN IF NOT EXISTS prescription_class TEXT;
+ALTER TABLE dwh.dim_medicine ADD COLUMN IF NOT EXISTS formulary_status TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS ux_dim_medicine_current ON dwh.dim_medicine(medicine_id) WHERE is_current;
 CREATE INDEX IF NOT EXISTS ix_dim_medicine_lookup ON dwh.dim_medicine(medicine_id, valid_from, valid_to);
 
@@ -162,9 +164,11 @@ CREATE TABLE IF NOT EXISTS dwh.fact_sales (
     medicine_key         INT  NOT NULL REFERENCES dwh.dim_medicine(medicine_key),
     channel_key          INT  NOT NULL REFERENCES dwh.dim_channel(channel_key),
     location_key         INT  REFERENCES dwh.dim_location(location_key),
+    hospital_key         INT  REFERENCES dwh.dim_hospital(hospital_key),   -- hospital-pharmacy sales only
     profile_key          INT  NOT NULL REFERENCES dwh.dim_sales_profile(profile_key),
     mfg_batch_id         TEXT,                          -- degenerate dimension
     quantity             INT  NOT NULL,
+    returned_qty         INT  NOT NULL DEFAULT 0,       -- packs returned (ReturnedQuantityPacks)
     unit_price           NUMERIC(14,4) NOT NULL,
     gross_amount         NUMERIC(16,4) NOT NULL,        -- qty x price
     discount_amount      NUMERIC(16,4) NOT NULL DEFAULT 0,
@@ -178,6 +182,8 @@ CREATE TABLE IF NOT EXISTS dwh.fact_sales (
 ) PARTITION BY RANGE (sale_date);
 ALTER TABLE dwh.fact_sales ADD COLUMN IF NOT EXISTS sale_timestamp_utc TIMESTAMPTZ;
 ALTER TABLE dwh.fact_sales ADD COLUMN IF NOT EXISTS sales_tax_amount NUMERIC(16,4);
+ALTER TABLE dwh.fact_sales ADD COLUMN IF NOT EXISTS hospital_key INT REFERENCES dwh.dim_hospital(hospital_key);
+ALTER TABLE dwh.fact_sales ADD COLUMN IF NOT EXISTS returned_qty INT NOT NULL DEFAULT 0;
 
 -- creates monthly partitions fact_sales_YYYYMM covering [from_date, to_date]
 CREATE OR REPLACE FUNCTION dwh.ensure_sales_partitions(from_date DATE, to_date DATE)
@@ -212,6 +218,7 @@ CREATE TABLE IF NOT EXISTS dwh.fact_hospital_demand (
     dispensed_qty    NUMERIC(14,2),                                     -- DispensedQuantityPacks
     actual_qty       NUMERIC(14,2),                                     -- ConsumedQuantityPacks
     unfulfilled_qty  NUMERIC(14,2),
+    stockout_days    NUMERIC(6,2),                                      -- days out of stock that month
     estimated_disease_cases NUMERIC(14,2),                              -- disease burden that month
     ingest_id        BIGINT,
     loaded_at        TIMESTAMPTZ DEFAULT now()
@@ -222,3 +229,4 @@ ALTER TABLE dwh.fact_hospital_demand ADD COLUMN IF NOT EXISTS received_qty NUMER
 ALTER TABLE dwh.fact_hospital_demand ADD COLUMN IF NOT EXISTS emergency_qty NUMERIC(14,2);
 ALTER TABLE dwh.fact_hospital_demand ADD COLUMN IF NOT EXISTS dispensed_qty NUMERIC(14,2);
 ALTER TABLE dwh.fact_hospital_demand ADD COLUMN IF NOT EXISTS estimated_disease_cases NUMERIC(14,2);
+ALTER TABLE dwh.fact_hospital_demand ADD COLUMN IF NOT EXISTS stockout_days NUMERIC(6,2);

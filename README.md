@@ -14,11 +14,11 @@ An automated data engineering pipeline built with **Apache Airflow**, **PostgreS
 
 | Layer | Where | What it does |
 |---|---|---|
-| Oversampling | `include/generator.py`, DAG `01_generate_source_data` | Adds one new month of data to every source file and drops a delta file into the landing zone |
+| Oversampling | `include/generator.py`, DAG `01_generate_source_data` | Adds one new month of data to every source file and drops a delta file into the landing zone. Retry-safe: a retried task finishes the same batch (plan files in `data/source/.pending/`) instead of adding the month twice |
 | Ingestion (batch) | `include/ingestion.py`, DAG `02_sdi_pipeline` | A sensor watches `data/incoming/`; every file is copied into `staging.<table>` and logged in `audit.batch_load_log` |
 | Ingestion (stream) | `include/streaming.py`, DAG `03_iot_stream_ingestion` | IoT readings are replayed in micro-batches; throughput, latency and malformed counts go to `audit.stream_metrics` |
 | Storage / staging | schema `staging` | Raw, append-only copy of every file, with lineage columns (`_ingest_id`, `_batch_id`, `_source_file`) |
-| Transformation | `sql/03`–`sql/21` | Validation → dimensions → facts, loaded incrementally using watermarks |
+| Transformation | `sql/03`–`sql/21` | Validation → dimensions → facts, loaded incrementally using watermarks. Each fact load is reconciled (staged = loaded + rejected + duplicates) in `audit.load_reconciliation`; if it does not add up, the load fails |
 | Query layer | `sql/30`, `sql/31`, `include/metrics.py` | Indexes, partitions, materialized views and the Q1–Q3 functions; every query is timed into `audit.query_log` |
 
 ### Star schema (Phase 1 SDI mart)
@@ -35,9 +35,9 @@ dim_sales_profile ┘  (transaction grain,         (conformed)    (periodic snap
 
 | Table | Grain / type | Attributes & measures |
 |---|---|---|
-| `fact_sales` | 1 row = 1 sales transaction | quantity, unit price, gross, discount, net revenue, sales tax, cost, gross margin, sale timestamp (UTC), `mfg_batch_id` |
-| `fact_hospital_demand` | 1 row = hospital x medicine x month | forecast, requested, approved, received, emergency, dispensed, consumed (actual), unfulfilled packs, estimated disease cases |
-| `dim_medicine` | SCD2 | name, therapeutic class, disease category, controlled, dosage form, plant, cost, price, storage temps, shelf life, cold chain; ICD-10, strength, pack size, prescription class (Type 1 inside the SCD2 dim) |
+| `fact_sales` | 1 row = 1 sales transaction | quantity, returned packs, unit price, gross, discount, net revenue, sales tax, cost, gross margin, sale timestamp (UTC), `mfg_batch_id`; `hospital_key` on hospital-pharmacy sales |
+| `fact_hospital_demand` | 1 row = hospital x medicine x month | forecast, requested, approved, received, emergency, dispensed, consumed (actual), unfulfilled packs, stockout days, estimated disease cases (semi-additive: repeated on each medicine of a disease) |
+| `dim_medicine` | SCD2 | name, therapeutic class, disease category, controlled, dosage form, plant, cost, price, storage temps, shelf life, cold chain; ICD-10, strength, pack size, prescription class, formulary status (Type 1 inside the SCD2 dim) |
 | `dim_hospital` | SCD1 | name, type, city, state, catchment population, licensed beds, ICU beds |
 | `dim_location` | SCD1 | the pharmacy (point of sale): id, name, GLN, type, city, state |
 | `dim_channel` | SCD1 | Retail Pharmacy / Hospital Pharmacy / E-commerce |
@@ -227,6 +227,7 @@ py -3.12 include/generator.py --only 05_pharmacy_sales_data --scale 1
 | DAG not showing | Wait 30 s. Check **Browse → DAG import errors** |
 | File ended up in `data/failed/` | `SELECT source_file, error_message FROM audit.batch_load_log WHERE status='failed';` |
 | Sensor task shows *skipped* | Normal: no new files had landed, so the run was skipped |
+| A load task is red | Check its log. A failed file fails `load_files_to_staging` (the other files still load). A reconciliation error means rows were lost: see `audit.load_reconciliation` and `audit.rejected_rows` |
 | Want to reload everything | `docker compose down -v`, empty `data/archive`, restore the original CSVs in `data/source`, repeat Step 1 |
 
 ## Repo layout

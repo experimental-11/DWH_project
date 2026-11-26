@@ -39,8 +39,8 @@ SELECT
     _ingest_id,
     NULLIF(btrim(sales_transaction_id), '')      AS sales_transaction_id,
     audit.try_date(sales_date, 'YYYY-MM-DD')     AS sale_date,
-    CASE WHEN sales_timestamp_utc ~ '^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}'
-         THEN sales_timestamp_utc::timestamptz END AS sale_timestamp_utc,
+    -- safe cast: any text that is not a real timestamp (e.g. month 13) becomes NULL
+    audit.try_timestamp(sales_timestamp_utc) AT TIME ZONE 'UTC' AS sale_timestamp_utc,
     NULLIF(btrim(medicine_id), '')               AS medicine_id,
     NULLIF(btrim(production_batch_id), '')       AS mfg_batch_id,
     NULLIF(btrim(pharmacy_id), '')               AS pharmacy_id,
@@ -49,6 +49,7 @@ SELECT
     pharmacy_type                                AS pharmacy_type,
     pharmacy_city                                AS city,
     pharmacy_state                               AS region,
+    NULLIF(btrim(hospital_id), '')               AS hospital_id,             -- hospital-pharmacy sales only
     -- The file has only 2 SalesChannel values (Physical Pharmacy / Ecommerce); hospital
     -- pharmacy sales are identified by PharmacyType. Derive the 3 business channels:
     CASE WHEN NULLIF(btrim(sales_channel), '') IS NULL THEN NULL
@@ -60,6 +61,7 @@ SELECT
     COALESCE(audit.try_numeric(discount_amount_usd), 0) AS discount_amount,
     audit.try_numeric(cost_of_goods_sold_usd)    AS cogs_amount,             -- source COGS (used for margin)
     audit.try_numeric(sales_tax_usd)             AS sales_tax_amount,
+    audit.try_int(returned_quantity_packs)::int  AS returned_qty,
     payment_method                               AS payment_method,
     customer_segment                             AS customer_segment,
     payer_type                                   AS payer_type,
@@ -90,6 +92,8 @@ SELECT
     audit.try_numeric(dispensed_quantity_packs)  AS dispensed_qty,
     audit.try_numeric(consumed_quantity_packs)   AS actual_qty,
     audit.try_numeric(unfulfilled_demand_packs)  AS unfulfilled_qty,
+    audit.try_numeric(stockout_days)             AS stockout_days,
+    NULLIF(btrim(formulary_status), '')          AS formulary_status,
     audit.try_numeric(estimated_disease_cases)   AS estimated_disease_cases
 FROM staging.hospital_demand;
 

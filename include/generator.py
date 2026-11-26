@@ -33,6 +33,8 @@ Run from Airflow (DAG 01_generate_source_data) or by hand:
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -109,17 +111,6 @@ def _id_factory(existing: pd.Series):
 def _decimals(series: pd.Series) -> int:
     s = series[series.str.contains(r"\.", na=False)].head(200)
     return int(s.str.split(".").str[1].str.len().max()) if len(s) else 0
-
-
-def _append_csv(df: pd.DataFrame, path: Path):
-    """Append rows to an existing CSV, making sure we start on a new line."""
-    with open(path, "rb+") as fh:
-        fh.seek(0, 2)
-        if fh.tell() > 0:
-            fh.seek(-1, 2)
-            if fh.read(1) != b"\n":
-                fh.write(b"\n")
-    df.to_csv(path, mode="a", header=False, index=False)
 
 
 def _price_cols(df):
@@ -329,9 +320,60 @@ def _generate_transactions(key, spec, df, rng, scale):
     return batch, info
 
 
-def generate_source(key: str, scale: float | None = None, seed: int | None = None) -> dict:
-    """Generate one new batch for one source file. Returns statistics for logging."""
+def _write_atomic(path: Path, data: bytes):
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)                              # atomic: the file is either old or new
+
+
+def _apply_plan(plan: dict) -> dict:
+    """Carry out a prepared batch. Safe to run again after a crash at any point."""
+    src = Path(plan["source_path"])
+    if plan["mode"] == "replace":                      # master data: whole file rewritten
+        new_src = Path(plan["new_source"])
+        if new_src.exists():                           # not applied yet (or crashed before)
+            os.replace(new_src, src)
+    else:                                              # transaction files: rows appended
+        data = Path(plan["append_file"]).read_bytes() if Path(plan["append_file"]).exists() else b""
+        before, size = plan["size_before"], src.stat().st_size
+        if data and before <= size <= before + len(data):
+            with open(src, "r+b") as fh:               # cut back to the old end, then append once
+                fh.truncate(before)
+                fh.seek(before)
+                fh.write(data)
+        elif data:
+            raise RuntimeError(f"{src.name} changed since this batch was prepared "
+                               f"({size} bytes, expected {before}-{before + len(data)}); not applying it twice")
+        Path(plan["append_file"]).unlink(missing_ok=True)
+    delta = Path(plan["delta_file"])
+    if delta.exists():                                 # hand the delta file to the file watcher
+        Path(plan["output_path"]).parent.mkdir(parents=True, exist_ok=True)
+        os.replace(delta, plan["output_path"])
+    return plan["stats"]
+
+
+def generate_source(key: str, scale: float | None = None, seed: int | None = None,
+                    run_id: str | None = None) -> dict:
+    """Generate one new batch for one source file. Returns statistics for logging.
+
+    Retry-safe: the batch is first prepared in data/source/.pending/ (a plan file + the new
+    rows), then applied. If the task is retried with the same run_id, a finished batch is
+    returned as it is, and a half-applied one is completed - a month is never added twice.
+    """
     spec = SOURCES[key]
+    run_id = run_id or f"manual_{datetime.now().strftime('%Y%m%dT%H%M%S')}"
+    tag = re.sub(r"[^A-Za-z0-9_.-]+", "_", f"{run_id}__{key}")
+    work = SOURCE_DIR / ".pending"
+    work.mkdir(parents=True, exist_ok=True)
+    plan_path, done_path = work / f"{tag}.plan.json", work / f"{tag}.done.json"
+    if done_path.exists():                             # retry after success: nothing to do
+        return json.loads(done_path.read_text())
+    if plan_path.exists():                             # retry after a crash: finish the same batch
+        stats = _apply_plan(json.loads(plan_path.read_text()))
+        _write_atomic(done_path, json.dumps(stats).encode())
+        plan_path.unlink()
+        return stats
+
     scale = GENERATOR["default_scale"] if scale is None else scale
     seed = GENERATOR["random_seed"] if seed is None else seed
     rng = np.random.default_rng(seed)
@@ -340,28 +382,33 @@ def generate_source(key: str, scale: float | None = None, seed: int | None = Non
     if not src_path.exists():
         raise FileNotFoundError(f"{src_path} not found - copy the original CSVs into data/source first")
     df = pd.read_csv(src_path, dtype=str, keep_default_na=False)
-    df.columns = [c.lstrip("﻿") for c in df.columns]
+    df.columns = [c.lstrip("\ufeff") for c in df.columns]
     rows_before = len(df)
+
+    stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    out_dir = STREAM_DIR if spec.get("stream") else INCOMING_DIR
+    out_path = out_dir / f"{key}__batch_{stamp}.csv"
+    plan = {"source_path": str(src_path), "output_path": str(out_path), "delta_file": str(work / f"{tag}.delta.csv")}
 
     if spec.get("master"):
         batch, full, info = _generate_master(key, spec, df, rng)
-        full.to_csv(src_path, index=False)
         n_bad = 0
+        plan.update(mode="replace", new_source=str(work / f"{tag}.source.csv"))
+        _write_atomic(Path(plan["new_source"]), full.to_csv(index=False).encode("utf-8"))
     else:
         batch, info = _generate_transactions(key, spec, df, rng, scale)
         pk0 = spec["pk"] if isinstance(spec["pk"], str) else spec["pk"][0]
         batch, n_bad = _inject_bad_rows(batch, pk0, info.get("date_col"), rng, GENERATOR["bad_row_ratio"])
-        _append_csv(batch, src_path)
+        size = src_path.stat().st_size
+        with open(src_path, "rb") as fh:              # make sure the appended rows start on a new line
+            fh.seek(max(size - 1, 0))
+            lead = b"" if size == 0 or fh.read(1) == b"\n" else b"\n"
+        plan.update(mode="append", size_before=size, append_file=str(work / f"{tag}.append.csv"))
+        _write_atomic(Path(plan["append_file"]),
+                      lead + batch.to_csv(header=False, index=False, lineterminator="\n").encode("utf-8"))
+    _write_atomic(Path(plan["delta_file"]), batch.to_csv(index=False).encode("utf-8"))
 
-    stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-    out_dir = STREAM_DIR if spec.get("stream") else INCOMING_DIR
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{key}__batch_{stamp}.csv"
-    tmp = out_path.with_suffix(".tmp")                 # write then rename => watcher never sees half a file
-    batch.to_csv(tmp, index=False)
-    tmp.rename(out_path)
-
-    return {
+    plan["stats"] = {
         "source": key,
         "rows_before": rows_before,
         "rows_generated": int(len(batch)),
@@ -373,6 +420,11 @@ def generate_source(key: str, scale: float | None = None, seed: int | None = Non
         "output_file": out_path.name,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
     }
+    _write_atomic(plan_path, json.dumps(plan).encode())   # from here on, a retry completes this batch
+    stats = _apply_plan(plan)
+    _write_atomic(done_path, json.dumps(stats).encode())
+    plan_path.unlink()
+    return stats
 
 
 if __name__ == "__main__":

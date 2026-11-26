@@ -502,6 +502,53 @@
     },
     {
       "type": "table",
+      "title": "Load reconciliation (staged = loaded + rejected + duplicates)",
+      "description": "Every fact load counts its rows; 'unexplained' must be 0, otherwise the load fails and nothing is saved",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "pharma_dwh"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 24,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "pharma_dwh"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT checked_at AS \"checked\", target, staged_rows AS staged, loaded_rows AS loaded, rejected_rows AS rejected,\n       duplicate_rows AS duplicates, unexplained_rows AS unexplained\nFROM audit.load_reconciliation ORDER BY checked_at DESC, target LIMIT 50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "id": 10
+    },
+    {
+      "type": "table",
       "title": "SCD Type 2 history: dim_medicine versions",
       "description": "Medicines with more than one version (price/cost changes from the generator). Empty until the first refresh with price changes.",
       "datasource": {
@@ -545,7 +592,7 @@
           "show": false
         }
       },
-      "id": 10
+      "id": 11
     },
     {
       "type": "timeseries",
@@ -604,7 +651,7 @@
           "sort": "desc"
         }
       },
-      "id": 11
+      "id": 12
     }
   ]
 }

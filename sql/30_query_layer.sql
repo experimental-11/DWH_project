@@ -12,6 +12,7 @@ CREATE INDEX IF NOT EXISTS ix_fs_medicine  ON dwh.fact_sales (medicine_key);
 CREATE INDEX IF NOT EXISTS ix_fs_channel   ON dwh.fact_sales (channel_key);
 CREATE INDEX IF NOT EXISTS ix_fs_location  ON dwh.fact_sales (location_key);
 CREATE INDEX IF NOT EXISTS ix_fs_profile   ON dwh.fact_sales (profile_key);
+CREATE INDEX IF NOT EXISTS ix_fs_hospital  ON dwh.fact_sales (hospital_key);
 
 CREATE INDEX IF NOT EXISTS ix_fhd_month    ON dwh.fact_hospital_demand (month_date_key);
 CREATE INDEX IF NOT EXISTS ix_fhd_hosp_med ON dwh.fact_hospital_demand (hospital_key, medicine_key);

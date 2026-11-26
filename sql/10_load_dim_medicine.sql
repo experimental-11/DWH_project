@@ -52,11 +52,13 @@ INSERT INTO dwh.dim_medicine (medicine_id, medicine_name, therapeutic_category, 
        is_controlled, dosage_form,
        manufacturer, unit_cost, unit_price, storage_temp_min_c, storage_temp_max_c,
        shelf_life_days, is_cold_chain, icd10_category, strength, pack_size, prescription_class,
-       row_hash, valid_from, version_no)
+       formulary_status, row_hash, valid_from, version_no)
 SELECT s.medicine_id, s.medicine_name, s.therapeutic_category, s.disease_category,
        s.is_controlled, s.dosage_form, s.manufacturer,
        s.unit_cost, s.unit_price, s.storage_temp_min_c, s.storage_temp_max_c, s.shelf_life_days,
        s.storage_temp_max_c <= 8, s.icd10_category, s.strength, s.pack_size, s.prescription_class,
+       (SELECT o.formulary_status FROM dwh.dim_medicine o                -- carried over from the old version
+         WHERE o.medicine_id = s.medicine_id AND o.version_no = c.version_no),
        s.row_hash, e.eff_date, c.version_no + 1
 FROM _src s JOIN _changed c USING (medicine_id), _eff e;
 

@@ -84,7 +84,7 @@ with DAG(
         f_sales = PythonOperator(task_id="load_fact_sales", python_callable=sql_task("20_load_fact_sales.sql"))
         f_demand = PythonOperator(task_id="load_fact_hospital_demand", python_callable=sql_task("21_load_fact_hospital_demand.sql"))
         views >> dim_med >> [dim_hosp, dim_misc]
-        dim_misc >> f_sales
+        [dim_misc, dim_hosp] >> f_sales          # fact_sales also looks up dim_hospital
         dim_hosp >> f_demand
 
     with TaskGroup("query_layer") as query_layer:

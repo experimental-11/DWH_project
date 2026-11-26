@@ -102,6 +102,10 @@ def stream_pending(**context):
         dest.mkdir(parents=True, exist_ok=True)
         shutil.move(str(path), dest / path.name)
         summary.append({"file": path.name, "events": total, "malformed": bad_total,
-                        "seconds": round(time.perf_counter() - t_file, 1)})
+                        "seconds": round(time.perf_counter() - t_file, 1), "failed": dest == FAILED_DIR})
         print(summary[-1])
+    failed = [s for s in summary if s.get("failed")]
+    if failed:
+        raise RuntimeError(f"{len(failed)} of {len(summary)} stream files failed (moved to data/failed): "
+                           + ", ".join(s["file"] for s in failed))
     return summary
